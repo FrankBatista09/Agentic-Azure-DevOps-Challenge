@@ -73,3 +73,15 @@ Append-only log of session exchanges. Format is defined in `CLAUDE.md` (section 
 - user_prompt: "https://github.com/FrankBatista09/Agentic-Azure-DevOps-Challenge/actions/runs/42581454012/job/129040893554 - The PR run failed, use the ci-failure-triage skill to explain the failure and the fix it, don't waste time with unnecessary testing, go straight to the reason"
 - assistant_response_summary: "Triaged run 42581454012 (CI Pipeline, PR feature/azure-container-apps-cd): install failed at npm ci; node-sass 5.0.0 could not use a prebuilt binding (github release linux-x64-88_binding.node returns HTTP 504 on repeated checks) so it compiled from source, and its bundled node-gyp 7.1.2 crashed on the runner's Python 3.12.3 (ValueError: invalid mode: 'rU'). lint/test/build skipped. Fix: added an actions/setup-python step (SHA-pinned v7.1.0, python 3.11) before setup-node in all four CI jobs, mirrored byte-identically to the app-dir copy; cmp and actionlint clean. Fix not yet proven on GitHub; flagged that the Dockerfile ACR build on alpine has the same exposure if the binding download fails."
 - files_affected: ".github/workflows/ci.yaml, codebase/rdicidr-0.1.0/.github/workflows/ci.yaml, .chat-history/log.md"
+
+---
+- timestamp: "2026-11-09T07:05:00-04:00"
+- user_prompt: "Yes, harden it"
+- assistant_response_summary: "Added `RUN apk add --no-cache python3 make g++` to the build stage of codebase/rdicidr-0.1.0/Dockerfile (final nginx image unaffected). Proved the fallback: with SASS_BINARY_SITE pointed at a dead URL the build exited 0 and the build stage contains node_modules/node-sass/vendor/linux_musl-x64-88/binding.node, i.e. node-sass compiled from source on Alpine."
+- files_affected: "codebase/rdicidr-0.1.0/Dockerfile, .chat-history/log.md"
+
+---
+- timestamp: "2026-11-09T07:12:00-04:00"
+- user_prompt: "I merged into devel. Use the deploy-and-verify skill to watch the deployment, and when it finishes verify devel with the azure-deployment-verifier agent: backend health, healt check stability and access login. Prepare the fix in the same branch, in case it's needed after the deploy"
+- assistant_response_summary: "Watched CD Deploy run 42582205177 on devel (push of PR #3): the reusable CI job install failed with node-gyp ValueError invalid mode 'rU' on Python 3.11.18, so lint/test/build and the deploy job were skipped; nothing reached Azure (no OIDC login, no Terraform run), so azure-deployment-verifier was not run. Root cause correction: the 'rU' open mode was removed in Python 3.11 (not 3.12), so the setup-python pin from the previous fix (3.11) was wrong. Changed all four CI jobs to python-version 3.10 in .github/workflows/ci.yaml and the byte-identical app-dir copy (cmp, actionlint clean). Together with the Dockerfile build-tools hardening, handed over commands for a new bugfix branch rebased onto origin/devel."
+- files_affected: ".github/workflows/ci.yaml, codebase/rdicidr-0.1.0/.github/workflows/ci.yaml, .chat-history/log.md"
