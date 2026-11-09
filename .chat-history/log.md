@@ -13,3 +13,21 @@ Append-only log of session exchanges. Format is defined in `CLAUDE.md` (section 
 - user_prompt: "Yes, commands"
 - assistant_response_summary: "Followed the `git-branching-workflow` skill: verified the working tree held only the expected changes (modified CLAUDE.md, untracked .chat-history/), confirmed devel was already up to date with origin, and created branch `feature/chat-history-log` from devel carrying the uncommitted changes. Printed copy-paste commands (one per fenced block) for git add, git status, commit `chore(tooling): log every session exchange to .chat-history/log.md`, push and `gh pr create --base devel`. Ran no commit, push or staging command."
 - files_affected: ".chat-history/log.md"
+
+---
+- timestamp: "2026-11-09T02:51:00-04:00"
+- user_prompt: "Not now"
+- assistant_response_summary: "User declined having the PR checks watched after pushing. No action taken; the hand-off commands for branch feature/chat-history-log remain as printed, and the open question about whether to gitignore .chat-history/ is still unanswered."
+- files_affected: ".chat-history/log.md"
+
+---
+- timestamp: "2026-11-09T02:56:00-04:00"
+- user_prompt: "Context: repo https://github.com/FrankBatista09/Agentic-Azure-DevOps-Challenge with main/devel/stage accepting changes only through PRs; GitHub environments devel and stage each requiring the user's approval before deploying; repo variables AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID for OIDC with federated credentials for environment:devel, environment:stage and pull_request; pipeline identity has Contributor on the subscription, Storage Blob Data Contributor on the state account, RBAC Administrator limited to assigning AcrPull; remote state with Entra ID auth only via TF_STATE_RESOURCE_GROUP / TF_STATE_STORAGE_ACCOUNT / TF_STATE_CONTAINER (rdicidr-tfstate-rg / strdicidrtf5553 / tfstate); region eastus; user logged in locally with az login. Asked to confirm and say which agents and skills would be used."
+- assistant_response_summary: "Confirmed the context and read it back (branching/PR rules, OIDC subject mapping, least-privilege role set, Entra-ID-only remote state, eastus, local az login). Inspected the repo at a glance: only `codebase/rdicidr-0.1.0/.github/workflows/ci.yaml` exists (no CD workflow) and terraform is flat (main.tf, outputs.tf, variables.tf) with no backend block, no tfvars and no devel/stage separation - flagged these as gaps to confirm by review, not yet reviewed. Mapped the work to agents (terraform-azure-expert, cicd-pipeline-expert, app-container-expert, azure-security-auditor, azure-deployment-verifier) and skills (review-and-propose, git-branching-workflow, terraform-plan-local, ci-failure-triage, deploy-and-verify). No files changed and no review performed yet."
+- files_affected: ".chat-history/log.md"
+
+---
+- timestamp: "2026-11-09T03:20:00-04:00"
+- user_prompt: "Use the cicd-pipeline-expert agent to make the existing CI pipeline run on pull requests into devel, without fixing anything else yet. I want to see how it fails on Github. Its jobs must run in codebase/rdicidr-0.1.0, and the original file there must stay, because the submission checks that path. create the branch and give the commands to commit, push and open tht PR"
+- assistant_response_summary: "Found PR #1 already merged into devel; rebuilt branch feature/ci-run-on-pr-to-devel from updated devel (first attempt wrongly branched off feature/chat-history-log and was deleted). Delegated to cicd-pipeline-expert, which created root .github/workflows/ci.yaml: trigger pull_request -> devel, defaults.run.working-directory codebase/rdicidr-0.1.0, cache path/hashFiles prefixed; all original defects kept (Node 14 vs engines, deps- vs node-modules- cache key, v3 actions, npm install). Original workflow untouched. Relayed full report and printed commit/push/PR commands."
+- files_affected: ".github/workflows/ci.yaml, .chat-history/log.md"
