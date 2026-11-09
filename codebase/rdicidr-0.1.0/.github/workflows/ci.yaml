@@ -41,6 +41,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # node-sass 5 falls back to compiling from source when its prebuilt binding cannot be downloaded.
+      # Its bundled node-gyp 7 cannot run on Python 3.12 (ValueError: invalid mode: 'rU'), so pin Python 3.11.
+      - name: Set up Python (node-gyp 7 needs Python < 3.12)
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+
       - name: Set up Node.js (version from .nvmrc)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -58,6 +65,13 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # node-sass 5 falls back to compiling from source when its prebuilt binding cannot be downloaded.
+      # Its bundled node-gyp 7 cannot run on Python 3.12 (ValueError: invalid mode: 'rU'), so pin Python 3.11.
+      - name: Set up Python (node-gyp 7 needs Python < 3.12)
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
 
       - name: Set up Node.js (version from .nvmrc)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -83,6 +97,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # node-sass 5 falls back to compiling from source when its prebuilt binding cannot be downloaded.
+      # Its bundled node-gyp 7 cannot run on Python 3.12 (ValueError: invalid mode: 'rU'), so pin Python 3.11.
+      - name: Set up Python (node-gyp 7 needs Python < 3.12)
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+
       - name: Set up Node.js (version from .nvmrc)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -105,6 +126,13 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # node-sass 5 falls back to compiling from source when its prebuilt binding cannot be downloaded.
+      # Its bundled node-gyp 7 cannot run on Python 3.12 (ValueError: invalid mode: 'rU'), so pin Python 3.11.
+      - name: Set up Python (node-gyp 7 needs Python < 3.12)
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
 
       - name: Set up Node.js (version from .nvmrc)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
