@@ -11,13 +11,15 @@ on:
     branches:
       - devel
       - stage
+  # Reused by cd-deploy.yaml to re-run CI on the exact commit that is about to be deployed.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -27,7 +29,9 @@ jobs:
   install:
     # 'head_ref' is the PR source branch. Allowed: feature/*|bugfix/* -> devel, devel -> stage.
     # If this job is skipped, every downstream job is skipped too (needs chain).
+    # When called from the CD workflow (push event) there is no PR: always run.
     if: >-
+      github.event_name != 'pull_request' ||
       (github.base_ref == 'devel' &&
         (startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'bugfix/'))) ||
       (github.base_ref == 'stage' && github.head_ref == 'devel')
