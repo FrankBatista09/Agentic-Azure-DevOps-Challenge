@@ -1,17 +1,20 @@
-FROM node:15-alpine AS build
+FROM node:15.5.1-alpine AS build
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
 COPY . .
 RUN npm run build
 
-FROM nginx:1.21-alpine
+FROM nginx:1.21.6-alpine
 
 COPY --from=build /app/build /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
