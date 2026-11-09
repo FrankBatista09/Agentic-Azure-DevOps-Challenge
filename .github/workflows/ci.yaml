@@ -1,12 +1,23 @@
-# Mirror of codebase/rdicidr-0.1.0/.github/workflows/ci.yaml (kept untouched for the submission).
-# GitHub only runs workflows from the repository root .github/workflows/, so this copy lives here.
-# Only the trigger (PRs to devel) and the working directory / cache paths differ from the original.
+# CI pipeline for rdicidr. Strict chain: install -> lint -> test -> build.
+# Runs on pull requests feature/* | bugfix/* -> devel and devel -> stage.
+# This file is kept byte-identical in two places:
+#   .github/workflows/ci.yaml                              (executed by GitHub)
+#   codebase/rdicidr-0.1.0/.github/workflows/ci.yaml       (submission copy, not executed by GitHub)
 name: CI Pipeline
 
 on:
   pull_request:
+    # 'branches' filters on the BASE branch of the PR.
     branches:
       - devel
+      - stage
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -14,66 +25,69 @@ defaults:
 
 jobs:
   install:
+    # 'head_ref' is the PR source branch. Allowed: feature/*|bugfix/* -> devel, devel -> stage.
+    # If this job is skipped, every downstream job is skipped too (needs chain).
+    if: >-
+      (github.base_ref == 'devel' &&
+        (startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'bugfix/'))) ||
+      (github.base_ref == 'stage' && github.head_ref == 'devel')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '14'
+          node-version-file: codebase/rdicidr-0.1.0/.nvmrc
+          cache: npm
+          cache-dependency-path: codebase/rdicidr-0.1.0/package-lock.json
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Cache node_modules
-        uses: actions/cache/save@v3
-        with:
-          path: codebase/rdicidr-0.1.0/node_modules
-          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+        run: npm ci
 
   lint:
     needs: [install]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '14'
+          node-version-file: codebase/rdicidr-0.1.0/.nvmrc
+          cache: npm
+          cache-dependency-path: codebase/rdicidr-0.1.0/package-lock.json
 
-      - name: Restore node_modules
-        uses: actions/cache/restore@v3
-        with:
-          path: codebase/rdicidr-0.1.0/node_modules
-          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run linter
         run: npm run lint
 
-      - name: Run formatter
+      - name: Run formatter check
         run: npm run prettier
 
   test:
-    needs: [install]
+    needs: [lint]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '14'
+          node-version-file: codebase/rdicidr-0.1.0/.nvmrc
+          cache: npm
+          cache-dependency-path: codebase/rdicidr-0.1.0/package-lock.json
 
-      - name: Restore node_modules
-        uses: actions/cache/restore@v3
-        with:
-          path: codebase/rdicidr-0.1.0/node_modules
-          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run tests
         env:
@@ -81,22 +95,22 @@ jobs:
         run: npm run test
 
   build:
-    needs: [lint]
+    needs: [test]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '14'
+          node-version-file: codebase/rdicidr-0.1.0/.nvmrc
+          cache: npm
+          cache-dependency-path: codebase/rdicidr-0.1.0/package-lock.json
 
-      - name: Restore node_modules
-        uses: actions/cache/restore@v3
-        with:
-          path: codebase/rdicidr-0.1.0/node_modules
-          key: deps-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build project
         run: npm run build
