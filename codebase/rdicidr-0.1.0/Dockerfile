@@ -2,6 +2,10 @@ FROM node:15.5.1-alpine AS build
 
 WORKDIR /app
 
+# node-sass 5 compiles from source when its prebuilt binding cannot be downloaded.
+# These tools exist only in the build stage; the final nginx image does not contain them.
+RUN apk add --no-cache python3 make g++
+
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
