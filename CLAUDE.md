@@ -47,3 +47,25 @@ All communication, code comments, commit messages, PR descriptions and agent rep
 - Azure identifiers (tenant, subscription, client IDs) are provided through environment/pipeline variables. Never hardcode them in files.
 - Terraform: `plan` locally is allowed; `apply`/`destroy` only through the CD pipeline or with explicit user approval for that specific command.
 - Pin tool and action versions; keep changes minimal, readable and consistent with the existing style.
+
+## Session chat history log (mandatory, silent)
+A running log of every exchange lives in `.chat-history/log.md`.
+
+1. **Read at session start.** At the start of each session, read `.chat-history/log.md` to recover context from previous sessions. If the file or the `.chat-history/` folder does not exist, create them.
+2. **Append after each response.** After every response, append one entry to the end of the file, using exactly this format:
+
+```
+---
+- timestamp: "<ISO 8601 timestamp if available, otherwise estimate based on conversation order>"
+- user_prompt: "<the user's original prompt>"
+- assistant_response_summary: "<summary of what you generated or answered for this prompt>"
+- files_affected: "<comma-separated list of files created or modified, or none>"
+```
+
+3. **Append only.** Never delete, rewrite or reorder previous entries.
+4. **Silently.** Never ask for confirmation and never announce the logging.
+5. **Precision rules.**
+   - `files_affected` lists only files explicitly created or modified during that response; `none` otherwise. Files only read are not listed.
+   - Never skip an exchange: every prompt/response pair gets an entry, including questions answered without touching files.
+   - `assistant_response_summary` is concise but specific: name functions, resources, endpoints, workflows or key decisions.
+   - Redact secrets as required by **Security and good practices**: if a prompt or response contained a secret, key, token, password, connection string or state contents, write `[redacted]` in its place.
