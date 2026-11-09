@@ -1,0 +1,187 @@
+# CD (deploy) for rdicidr: push to devel -> deploy environment 'devel', push to stage -> deploy environment 'stage'.
+# Flow: CI on the exact commit -> [manual approval of the GitHub Environment] -> OIDC login -> (first deploy only:
+# targeted apply of the container registry) -> build image in ACR tagged with the commit SHA -> terraform plan
+# + apply of that exact saved plan -> smoke test of the Application Gateway public endpoint.
+# This file is kept byte-identical in two places:
+#   .github/workflows/cd-deploy.yaml                              (executed by GitHub)
+#   codebase/rdicidr-0.1.0/.github/workflows/cd-deploy.yaml       (submission copy, not executed by GitHub)
+name: CD Deploy
+
+on:
+  push:
+    # Changes reach these branches only through pull requests (repository ruleset).
+    branches:
+      - devel
+      - stage
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: 1.17.1
+  IMAGE_REPOSITORY: rdicidr
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  # Terraform azurerm provider 4.x and azurerm backend: OIDC for the API, Entra ID (no keys) for the state blob.
+  ARM_USE_OIDC: "true"
+  ARM_USE_AZUREAD: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  # Re-runs CI (reusable workflow) on the commit that is about to be deployed.
+  ci:
+    name: CI on deployed commit
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yaml
+
+  deploy:
+    name: Deploy ${{ github.ref_name }}
+    needs: [ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # The environment gives the OIDC subject 'environment:<name>' and the manual approval gate.
+    environment:
+      name: ${{ github.ref_name }}
+    # One deploy at a time per environment; a running terraform apply is never cancelled.
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: codebase/rdicidr-0.1.0/terraform
+    env:
+      TARGET_ENV: ${{ github.ref_name }}
+      IMAGE_TAG: ${{ github.sha }}
+      TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      TF_STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform fmt, init and validate
+        run: |
+          terraform fmt -check -recursive -diff
+          terraform init -lockfile=readonly \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TF_STATE_CONTAINER}" \
+            -backend-config="key=${TARGET_ENV}.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+          terraform validate -no-color
+
+      # Phase 1, first deploy of an environment only. The state has no 'acr_name' output yet, so the registry does
+      # not exist. Create ONLY the registry (targeted apply on one address; it depends only on the resource group),
+      # so the image can be built and pushed before the Container App is created. Later runs skip this step.
+      - name: Bootstrap registry (first deploy only)
+        run: |
+          # Empty state: "terraform output -raw" exits 0 with no value; a state without the output exits 1.
+          if [ -n "$(terraform output -raw acr_name 2> /dev/null)" ]; then
+            echo "Registry already exists in state; bootstrap skipped."
+            exit 0
+          fi
+          echo "First deploy of '${TARGET_ENV}': creating the container registry only."
+          terraform plan -no-color -lock-timeout=10m \
+            -target=azurerm_container_registry.main \
+            -var-file="env/${TARGET_ENV}.tfvars" -var="image_tag=${IMAGE_TAG}" \
+            -out="$RUNNER_TEMP/bootstrap.tfplan"
+          terraform apply -no-color -lock-timeout=10m "$RUNNER_TEMP/bootstrap.tfplan"
+          acr_name="$(terraform output -raw acr_name 2> /dev/null || true)"
+          if [ -z "$acr_name" ]; then
+            echo "::error::Registry bootstrap finished but output 'acr_name' is still empty."
+            exit 1
+          fi
+          echo "### Registry bootstrapped for \`${TARGET_ENV}\`: \`${acr_name}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Phase 2. 'az acr build' builds in ACR Tasks: it needs only Contributor (no AcrPush role, no registry
+      # password, no docker credentials on the runner). REACT_APP_API_URL is an optional repository variable.
+      - name: Build and push image to ACR (tag = commit SHA)
+        env:
+          REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL }}
+        run: |
+          acr_name="$(terraform output -raw acr_name 2> /dev/null || true)"
+          if [ -z "$acr_name" ]; then
+            echo "::error::Output 'acr_name' is empty; the registry does not exist."
+            exit 1
+          fi
+          cd "$GITHUB_WORKSPACE/codebase/rdicidr-0.1.0"
+          az acr build --only-show-errors \
+            --registry "$acr_name" \
+            --image "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+            --build-arg REACT_APP_API_URL="${REACT_APP_API_URL:-}" \
+            --file Dockerfile .
+          echo "Pushed ${acr_name}.azurecr.io/${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+
+      # Phase 3. Plan once, show it, then apply exactly that saved plan file.
+      - name: Terraform plan
+        run: |
+          plan_txt="$RUNNER_TEMP/plan.txt"
+          terraform plan -no-color -lock-timeout=10m \
+            -var-file="env/${TARGET_ENV}.tfvars" -var="image_tag=${IMAGE_TAG}" \
+            -out="$RUNNER_TEMP/tfplan" > "$plan_txt" 2>&1 || { cat "$plan_txt"; exit 1; }
+          cat "$plan_txt"
+          {
+            echo "### Terraform plan for \`${TARGET_ENV}\` (commit \`${IMAGE_TAG}\`)"
+            echo "<details><summary>Plan output</summary>"
+            echo
+            echo '```'
+            head -c 800000 "$plan_txt"
+            echo
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform apply (saved plan)
+        run: terraform apply -no-color -lock-timeout=10m "$RUNNER_TEMP/tfplan"
+
+      - name: Smoke test the gateway endpoint
+        env:
+          REQUIRED_CONSECUTIVE: "5"
+          MAX_ATTEMPTS: "60"
+          INTERVAL_SECONDS: "10"
+        run: |
+          gateway_url="$(terraform output -raw gateway_url)"
+          gateway_url="${gateway_url%/}"
+          smoke() {
+            local url="$1" ok=0 attempt code
+            for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2> /dev/null || true)"
+              if [ "$code" = "200" ]; then ok=$((ok + 1)); else ok=0; fi
+              echo "[$attempt/$MAX_ATTEMPTS] $url -> $code (consecutive 200: $ok/$REQUIRED_CONSECUTIVE)"
+              if [ "$ok" -ge "$REQUIRED_CONSECUTIVE" ]; then return 0; fi
+              sleep "$INTERVAL_SECONDS"
+            done
+            return 1
+          }
+          status=0
+          smoke "${gateway_url}/health" || status=1
+          smoke "${gateway_url}/" || status=1
+          {
+            echo "### Deployment \`${TARGET_ENV}\`"
+            echo "- Endpoint: ${gateway_url}"
+            echo "- Image tag (commit): \`${IMAGE_TAG}\`"
+            if [ "$status" -eq 0 ]; then echo "- Smoke test: PASSED"; else echo "- Smoke test: FAILED"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
